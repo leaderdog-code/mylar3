@@ -268,6 +268,20 @@ class FileChecker(object):
         #split the file and then get all the relevant numbers that could possibly be an issue number.
         #remove the extension.
         modfilename = re.sub(filetype, '', filename).strip()
+        # Invisible-whitespace normalization (NBSP-fix v1.1):
+        # Replace NBSP (U+00A0), zero-width chars (U+200B/C/D), narrow NBSP
+        # (U+202F), figure space (U+2007), ZW NBSP/BOM (U+FEFF), ideographic
+        # space (U+3000) with regular space. These invisible characters
+        # occasionally end up in filenames (renamer bugs, HTML paste, OS
+        # quirks) and look identical to spaces to the eye but break the
+        # tokenization / parsing logic below — e.g. "Series\xa0001" gets
+        # parsed as a single token "Series\xa0001" instead of "Series" + "001",
+        # which causes issue_number extraction to fail and the file ends up
+        # in an "Archived" state with no diagnostic. Operating on modfilename
+        # only — the original `filename` parameter is preserved so file-system
+        # operations (which use the raw on-disk name) still work.
+        modfilename = re.sub(r'[   ​‌‍﻿　]+', ' ', modfilename)
+        modfilename = re.sub(r' +', ' ', modfilename).strip()
         reading_order = None
 
         #if it's a story-arc, make sure to remove any leading reading order #'s
@@ -1426,14 +1440,21 @@ class FileChecker(object):
         mod_watchname_decoded = mod_watch_decoded['mod_watchcomic']
 
         #remove the spaces...
-        nspace_seriesname = re.sub(' ', '', mod_seriesname)
-        nspace_watchcomic = re.sub(' ', '', mod_watchcomic)
+        # remove all whitespace (NBSP-fix v1): use \s+ instead of literal
+        # ' ' so non-breaking space (U+00A0), zero-width chars (U+200B/C/D),
+        # narrow NBSP (U+202F), ideographic space (U+3000) etc. all get
+        # stripped during name comparison. Without this, files with
+        # invisible-whitespace pollution in their names (e.g. NBSP between
+        # series title and issue number) fail matchIT comparison even
+        # though they look identical to the eye.
+        nspace_seriesname = re.sub(r'\s+', '', mod_seriesname)
+        nspace_watchcomic = re.sub(r'\s+', '', mod_watchcomic)
         nspace_altseriesname = None
         if mod_altseriesname is not None:
-            nspace_altseriesname = re.sub(' ', '', mod_altseriesname)
-            nspace_altseriesname_decoded = re.sub(' ', '', mod_altseriesname_decoded)
-        nspace_seriesname_decoded = re.sub(' ', '', mod_seriesname_decoded)
-        nspace_watchname_decoded = re.sub(' ', '', mod_watchname_decoded)
+            nspace_altseriesname = re.sub(r'\s+', '', mod_altseriesname)
+            nspace_altseriesname_decoded = re.sub(r'\s+', '', mod_altseriesname_decoded)
+        nspace_seriesname_decoded = re.sub(r'\s+', '', mod_seriesname_decoded)
+        nspace_watchname_decoded = re.sub(r'\s+', '', mod_watchname_decoded)
         try:
             if self.AS_ALT[0] != '127372873872871091383 abdkhjhskjhkjdhakajhf':
                 logger.fdebug('Possible Alternate Names to match against (if necessary): %s' % self.AS_Alt)
