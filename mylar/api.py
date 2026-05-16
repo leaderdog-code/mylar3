@@ -612,7 +612,7 @@ class Api(object):
                 notfound.append({'comicid': comicid})
             else:
                 if comicid not in mylar.REFRESH_QUEUE.queue: #if not any(ext['comicid'] == comicid for ext in mylar.REFRESH_LIST):
-                    watch.append({"comicid": comicid, "comicname": chkdb['ComicName']})
+                    watch.append({"comicid": comicid, "comicname": chkdb['ComicName'], "seriesyear": chkdb['ComicYear']})
                 else:
                     already_added.append({'comicid': comicid, 'comicname': chkdb['ComicName']})
 
@@ -643,7 +643,7 @@ class Api(object):
                 ref_line = 'for %s items (%s)' % (len(watch), watch)
 
             logger.warn('[API-refreshComic] Successfully background submitted refresh %s' % (ref_line))
-            self.data = self._successResponse('Refresh successfully submitted %s.' % (self.id, ref_line))
+            self.data = self._successResponse('Refresh successfully submitted %s.' % (ref_line,))
 
         return
 
