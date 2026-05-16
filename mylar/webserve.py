@@ -2176,6 +2176,67 @@ class WebInterface(object):
         return value
 
     description_edit.exposed = True
+    # ============================================================
+    # User Notes — persistent per-series notes in comics.UserNotes.
+    # Description is CV-sourced (refreshComic overwrites). UserNotes
+    # is user-authored and never touched by refreshComic, so it
+    # survives series refresh. Mirrors description_edit's myDB.upsert
+    # pattern.
+    # ============================================================
+    @staticmethod
+    def _user_notes_extract_comicid(id):
+        """The HTML span uses id="un{ComicID}". Strip the 2-letter
+        prefix and return the digits."""
+        import re as _re
+        s = str(id or '')
+        if s.startswith('un'):
+            return s[2:]
+        m = _re.search(r'\d+', s)
+        return m.group(0) if m else ''
+
+    def get_user_notes(self, id=None, **kwargs):
+        """jeditable loadurl handler — returns saved UserNotes for a
+        ComicID, or empty string."""
+        try:
+            comicid = self._user_notes_extract_comicid(id)
+            if not comicid:
+                return ''
+            myDB = db.DBConnection()
+            row = myDB.selectone(
+                'SELECT UserNotes FROM comics WHERE ComicID = ?', [comicid]
+            ).fetchone()
+            if row is None:
+                return ''
+            return row['UserNotes'] or ''
+        except Exception as e:
+            logger.warning('get_user_notes failed: %s' % e)
+            return ''
+    get_user_notes.exposed = True
+
+    def user_notes_edit(self, id, value):
+        """jeditable POST handler — save UserNotes against a ComicID.
+        Empty value clears the field. Returns the value back so jeditable
+        renders it in the span on success."""
+        try:
+            comicid = self._user_notes_extract_comicid(id)
+            if not comicid:
+                return value or ''
+            myDB = db.DBConnection()
+            serieschk = myDB.selectone(
+                'SELECT ComicName FROM comics WHERE ComicID = ?', [comicid]
+            ).fetchone()
+            if serieschk is None:
+                logger.error('user_notes_edit: ComicID %s not found' % comicid)
+                return value or ''
+            clean = (value or '').strip() or None
+            myDB.upsert('comics', {'UserNotes': clean}, {'ComicID': comicid})
+            logger.info('Updated UserNotes for %s [%s]' % (serieschk['ComicName'], comicid))
+            return value or ''
+        except Exception as e:
+            logger.warning('user_notes_edit failed: %s' % e)
+            return value or ''
+    user_notes_edit.exposed = True
+
 
     def issue_edit(self, id, value):
         #logger.fdebug('id: ' + str(id))

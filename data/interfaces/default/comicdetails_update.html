@@ -280,20 +280,32 @@
                                     %endif
                                     </br>
                                 </div>
-                                %if comicConfig['description']:
-                                    <%
+                                <%
+                                     # Description prep (CV-sourced, may be empty)
+                                     if comicConfig['description']:
                                          comicDescription = re.sub(r'[\n\r]', '</br>', comicConfig['description']).strip()
                                          if len(comicDescription) > 300:
                                              cdescription = '%s <span id="dots">...</span><span id="more">%s</span><a href="#" onclick="moreMore()" style="color:yellow;" id="readMore"> more</a>' % (comicDescription[:300], comicDescription[300:])
                                          else:
                                              cdescription = comicDescription
-                                    %>
-                                    <div>
-                                        <br/><label><big>Description:</big></label><br/>
+                                     else:
+                                         cdescription = '<em style="color:#888;">No description available from ComicVine.</em>'
+                                %>
+                                <br/>
+                                <div id="info-tabs">
+                                    <ul>
+                                        <li><a href="#info-tab-desc">Description</a></li>
+                                        <li><a href="#info-tab-notes">User Notes</a></li>
+                                    </ul>
+                                    <div id="info-tab-desc">
                                         <small><input type="image" href="#" id="jeditable-activate" src="images/edit.png" height="15px" width="15px" title="Edit description" />
                                         <span style="white-space: pre-wrap" class="description_edit" id="d${comic['ComicID']}">${cdescription}</span></small>
                                     </div>
-                                %endif
+                                    <div id="info-tab-notes">
+                                        <small><input type="image" href="#" id="user-notes-activate" src="images/edit.png" height="15px" width="15px" title="Edit user notes" />
+                                        <span style="white-space: pre-wrap; min-height: 1.2em; display:inline-block;" class="user_notes_edit" id="un${comic['ComicID']}"><em style="color:#888;">Click the pencil to add user notes — preserved across ComicVine refreshes.</em></span></small>
+                                    </div>
+                                </div>
                          </fieldset>
                 </td>
             </tr>
@@ -605,6 +617,26 @@
         <script>
         var collapsedGroups = {};
         $(document).ready(function() {
+            // Initialize Description | User Notes sub-tabs (jQuery UI tabs)
+            try { $("#info-tabs").tabs(); } catch(e) { console.log('info-tabs init failed', e); }
+
+            // Populate User Notes span from server on page load — the template
+            // renders a placeholder, and only the save-callback updates the span,
+            // so without this fetch a hard refresh shows the placeholder even
+            // when the DB has saved notes.
+            $('.user_notes_edit').each(function() {
+                var $span = $(this);
+                var elemId = $span.attr('id');
+                if (!elemId) return;
+                $.get('get_user_notes', { id: elemId }).done(function(data) {
+                    if (data && data.toString().trim()) {
+                        $span.html(data);
+                    }
+                }).fail(function() {
+                    /* leave placeholder alone */
+                });
+            });
+
             $("#jeditable-activate").click(function() {
                $(this).prev().click();
                $('.description_edit').trigger('custom_event');
@@ -639,6 +671,38 @@
                       spanline = value;
                     }
                     return($(this).html(spanline));
+                }
+            });
+
+            // User Notes inline editor — saves to comics.UserNotes via user_notes_edit endpoint.
+            // Mirrors description_edit setup but persists in a separate column that
+            // refreshComic doesn't overwrite.
+            $("#user-notes-activate").click(function() {
+                $(this).siblings('.user_notes_edit').trigger('user_notes_event');
+            });
+            $('.user_notes_edit').editable('user_notes_edit', {
+                loadurl: 'get_user_notes',
+                type: 'textarea',
+                submit: '<button class="button btn btn-success" type="submit">Save</button>',
+                cancel: '<button class="button btn btn-danger" type="cancel">Cancel</button>',
+                event: 'user_notes_event',
+                height: '180px',
+                width: '500px',
+                tooltip: '',
+                placeholder: 'Add your notes here...',
+                onedit: function(){
+                    $(this).siblings("#user-notes-activate").addClass('hidden');
+                },
+                onreset: function(settings, original){
+                    $("#user-notes-activate.hidden").removeClass('hidden');
+                    return($(this).html(original.revert));
+                },
+                callback : function(value, settings) {
+                    $("#user-notes-activate.hidden").removeClass('hidden');
+                    if (!value || !value.trim()) {
+                        return($(this).html('<em style="color:#888;">Click the pencil to add user notes — preserved across ComicVine refreshes.</em>'));
+                    }
+                    return($(this).html(value));
                 }
             });
         });
