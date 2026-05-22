@@ -933,6 +933,58 @@ class WebInterface(object):
         })
     loadIssueDetails.exposed = True
 
+    # ------------------------------------------------------------------
+    # AltNum-v1: per-series alternate numbering control endpoints.
+    # See: scripts/mylar_alt_numbering_patch.py
+    # ------------------------------------------------------------------
+    def toggleAltNumbering(self, ComicID=None, **kwargs):
+        """Flip comics.AltNumberingActive between 0 and 1 for a series."""
+        if not ComicID:
+            return json.dumps({'status': 'error', 'msg': 'ComicID required'})
+        myDB = db.DBConnection()
+        row = myDB.selectone(
+            'SELECT AltNumberingActive FROM comics WHERE ComicID=?',
+            [ComicID]).fetchone()
+        if row is None:
+            return json.dumps({'status': 'error', 'msg': 'ComicID not found'})
+        new_state = 0 if (row['AltNumberingActive'] == 1) else 1
+        myDB.action('UPDATE comics SET AltNumberingActive=? WHERE ComicID=?',
+                    [new_state, ComicID])
+        logger.info('[ALT-NUM] ComicID %s AltNumberingActive=%s' %
+                    (ComicID, new_state))
+        return json.dumps({'status': 'ok', 'active': new_state})
+    toggleAltNumbering.exposed = True
+
+    def populateAltNumbers(self, ComicID=None, **kwargs):
+        """Auto-assign AltIssueNumber 1..N by ReleaseDate ASC for a series.
+
+        Tiebreaker: IssueDate, then Int_IssueNumber. Issues with no date
+        sort last in their natural Issue_Number order.
+        """
+        if not ComicID:
+            return json.dumps({'status': 'error', 'msg': 'ComicID required'})
+        myDB = db.DBConnection()
+        issues = myDB.select(
+            "SELECT IssueID, Issue_Number, Int_IssueNumber, ReleaseDate, "
+            "IssueDate FROM issues WHERE ComicID=? "
+            "ORDER BY CASE WHEN ReleaseDate IS NULL OR ReleaseDate='' "
+            "THEN '9999-99-99' ELSE ReleaseDate END ASC, "
+            "CASE WHEN IssueDate IS NULL OR IssueDate='' "
+            "THEN '9999-99-99' ELSE IssueDate END ASC, "
+            "CAST(Int_IssueNumber AS INTEGER) ASC", [ComicID])
+        if not issues:
+            return json.dumps({'status': 'error', 'msg': 'no issues'})
+        count = 0
+        for n, iss in enumerate(issues, start=1):
+            myDB.action(
+                'UPDATE issues SET AltIssueNumber=? WHERE IssueID=?',
+                [str(n), iss['IssueID']])
+            count += 1
+        logger.info('[ALT-NUM] populated %d alt numbers for ComicID %s' %
+                    (count, ComicID))
+        return json.dumps({'status': 'ok', 'count': count})
+    populateAltNumbers.exposed = True
+
     def loadAnnualDetails(self, ComicID=None, iDisplayStart=0, iDisplayLength=25, iSortCol_0=0, sSortDir_0="desc", sSearch="", **kwargs):
         #logger.info('comicid: %s' % ComicID)
         if ComicID is None:

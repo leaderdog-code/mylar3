@@ -97,6 +97,23 @@ def search_init(
     #            AlternateSearch += '##' + filesafe
     #        unaltered_ComicName = ComicName
 
+    # AltNum-v1: if this comic has AltNumberingActive=1 and the issue
+    # has an AltIssueNumber set, swap IssueNumber to use the alt for
+    # the entire search pipeline. Single hook for search_init -> NZB_SEARCH.
+    try:
+        if IssueID:
+            _altrow = db.DBConnection().selectone(
+                "SELECT c.AltNumberingActive, i.AltIssueNumber "
+                "FROM issues i LEFT JOIN comics c ON i.ComicID=c.ComicID "
+                "WHERE i.IssueID=?", [IssueID]).fetchone()
+            if (_altrow and _altrow['AltNumberingActive'] == 1
+                    and _altrow['AltIssueNumber']):
+                logger.fdebug('[ALT-NUM] search swap %s -> %s'
+                              % (IssueNumber, _altrow['AltIssueNumber']))
+                IssueNumber = _altrow['AltIssueNumber']
+    except Exception as _altexc:
+        logger.fdebug('[ALT-NUM] search swap failed: %s' % _altexc)
+
     if ComicYear is None:
         ComicYear = str(datetime.datetime.now().year)
     else:

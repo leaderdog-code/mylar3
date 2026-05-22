@@ -1088,6 +1088,15 @@ def dbcheck():
     except sqlite3.OperationalError:
         c.execute('ALTER TABLE issues ADD COLUMN AltIssueNumber TEXT')
 
+    # AltNum-v1 schema migration: per-series toggle for alternate
+    # numbering. When 1, Mylar uses issues.AltIssueNumber instead of
+    # issues.Issue_Number for rename/match/search. See:
+    # scripts/mylar_alt_numbering_patch.py
+    try:
+        c.execute('SELECT AltNumberingActive from comics')
+    except sqlite3.OperationalError:
+        c.execute('ALTER TABLE comics ADD COLUMN AltNumberingActive INTEGER DEFAULT 0')
+
     try:
         c.execute('SELECT IssueDate_Edit from issues')
     except sqlite3.OperationalError:

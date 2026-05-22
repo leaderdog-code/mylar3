@@ -1346,7 +1346,19 @@ def forceRescan(ComicID, archive=None, module=None, recheck=False):
                     int_iss = None
                 except IndexError:
                     break
+                # AltNum-v1.1: dual-match. Mylar accepts EITHER the
+                # canonical Issue_Number OR the AltIssueNumber when a file
+                # is parsed. This lets the user re-number disk files
+                # incrementally without breaking the existing collection
+                # -- both naming conventions resolve to the same issue.
                 int_iss = helpers.issue_number_parser(reiss['Issue_Number']).asInt
+                _alt_int_iss = None
+                try:
+                    if (rescan['AltNumberingActive'] == 1
+                            and reiss['AltIssueNumber']):
+                        _alt_int_iss = helpers.issue_number_parser(reiss['AltIssueNumber']).asInt
+                except Exception:
+                    pass
                 issyear = reiss['IssueDate'][:4]
                 old_status = reiss['Status']
                 issname = reiss['IssueName']
@@ -1370,8 +1382,9 @@ def forceRescan(ComicID, archive=None, module=None, recheck=False):
 
                 fnd_iss_except = 'None'
 
-                if int(fcdigit) == int_iss:
-                    logger.fdebug(module + ' [' + str(reiss['IssueID']) + '] Issue match - fcdigit: ' + str(fcdigit) + ' ... int_iss: ' + str(int_iss))
+                # AltNum-v1.1: accept either Issue_Number or AltIssueNumber.
+                if int(fcdigit) == int_iss or (_alt_int_iss is not None and int(fcdigit) == _alt_int_iss):
+                    logger.fdebug(module + ' [' + str(reiss['IssueID']) + '] Issue match - fcdigit: ' + str(fcdigit) + ' ... int_iss: ' + str(int_iss) + ' alt_int_iss: ' + str(_alt_int_iss))
 
                     if '-' in temploc and temploc.find(reiss['Issue_Number']) > temploc.find('-'):
                         logger.fdebug(module + ' I have detected a possible Title in the filename')

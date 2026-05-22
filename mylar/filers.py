@@ -469,6 +469,18 @@ class FileHandlers(object):
 
             else:
                 issuenum = issueinfo['Issue_Number']
+                # AltNum-v1: when toggle is active on the comic and an alt
+                # number is stored, use it for $Issue resolution so the
+                # rendered filename shows the sequential number, not the
+                # publisher's date-based one (e.g. Heavy Metal 197001 -> 1).
+                try:
+                    if (self.comic['AltNumberingActive'] == 1
+                            and issueinfo['AltIssueNumber']):
+                        logger.fdebug('[ALT-NUM] rename swap %s -> %s'
+                                      % (issuenum, issueinfo['AltIssueNumber']))
+                        issuenum = issueinfo['AltIssueNumber']
+                except Exception as _altexc:
+                    logger.fdebug('[ALT-NUM] rename swap failed: %s' % _altexc)
                 issuedate = issueinfo['IssueDate']
                 publisher = self.comic['ComicPublisher']
                 series = self.comic['ComicName']

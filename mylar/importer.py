@@ -1128,6 +1128,30 @@ def issue_collection(issuedata, nostatus, serieslast_updated=None, suppress_adda
             if any([lastchkdate is None, lastchkdate == '0000-00-00']):
                 lastchkdate = isslastdate['ReleaseDate']
 
+        # AltNum-v1.1: precompute alt-numbering state so new issues coming
+        # in via CV refresh on an alt-numbered series get auto-assigned
+        # the next sequential alt#. This is what avoids the user ever
+        # seeing the publisher's stupid YYYYMM numbering for a NEW issue.
+        _altnum_active = 0
+        _next_altnum = 0
+        try:
+            _altrow = myDB.selectone(
+                'SELECT AltNumberingActive FROM comics WHERE ComicID=?',
+                [issuedata[0]['ComicID']]).fetchone()
+            if _altrow and _altrow['AltNumberingActive'] == 1:
+                _altnum_active = 1
+                _maxrow = myDB.selectone(
+                    "SELECT MAX(CAST(AltIssueNumber AS INTEGER)) AS m FROM issues "
+                    "WHERE ComicID=? AND AltIssueNumber IS NOT NULL "
+                    "AND AltIssueNumber <> ''",
+                    [issuedata[0]['ComicID']]).fetchone()
+                if _maxrow and _maxrow['m'] is not None:
+                    _next_altnum = int(_maxrow['m']) + 1
+                else:
+                    _next_altnum = 1
+        except Exception:
+            pass
+
         for issue in issuedata:
 
 
@@ -1202,6 +1226,17 @@ def issue_collection(issuedata, nostatus, serieslast_updated=None, suppress_adda
                 pass #newValueDict['Status'] = "Skipped"
 
             #logger.fdebug('issue_collection results: [%s] %s' % (controlValueDict, newValueDict))
+            # AltNum-v1.1: preserve a user-set AltIssueNumber across CV
+            # refreshes, AND auto-assign next alt# to brand-new issues on
+            # alt-numbered series so the user never sees publisher YYYYMM.
+            try:
+                if iss_exists is not None and iss_exists['AltIssueNumber']:
+                    newValueDict.pop('AltIssueNumber', None)
+                elif iss_exists is None and _altnum_active == 1:
+                    newValueDict['AltIssueNumber'] = str(_next_altnum)
+                    _next_altnum += 1
+            except Exception:
+                pass
             try:
                 myDB.upsert(dbwrite, newValueDict, controlValueDict)
             except sqlite3.InterfaceError as e:

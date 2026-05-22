@@ -455,6 +455,12 @@
   <div>
    <div id="btn_container">
         <div id="btn_menu" style="float:right;padding-bottom:5px;">
+            <!-- AltNum-v1: series-level alt-numbering controls.
+                 Placed in btn_menu (left of Show Store Date) so they don't
+                 overlap with the "Mark selected as..." dropdown over the
+                 issue table and don't clutter subhead_menu. -->
+            <a id="menu_link_edit" onclick="toggle_altnumbering(${comic['ComicID']}); return false;" href="#"><span id="altnum_label" title="Toggle alternate issue numbering. When ON, Mylar displays AltIssueNumber as the primary #, dual-matches against both numbering schemes during rescan, and searches providers using the alt#.">Alt Numbering: <span id="altnum_state">${"ON" if comic["AltNumberingActive"] == 1 else "OFF"}</span></span></a>
+            <a id="menu_link_edit" onclick="populate_altnumbers(${comic['ComicID']}); return false;" href="#"><span id="altnum_populate_label" title="Auto-assign AltIssueNumber 1..N by ReleaseDate ASC. Confirms before running. Existing alt numbers are overwritten.">Populate Alt Numbers</span></a>
             <a id="menu_link_edit" onclick="display_date('click')" href="#"><span id="display_the_date" title="Change date values to display Store or Cover date">Show Store Date</span></a>
             <div id="skipped_2_enabled"><a id="menu_link_edit" onclick="skipped2wanted()" href="#"><span id="skipped_2_wanted" title="Change the status of all Skipped issues to Wanted">Change All Skipped to Wanted</span></a></div>
         </div>
@@ -500,6 +506,44 @@
                 %endif          
         </div>
 
+
+          <!-- AltNum-v1: state + handlers for alt-numbering.
+               Visible controls live in subhead_menu (above). -->
+          <script>
+          window.ALTNUM_ACTIVE = ${1 if comic["AltNumberingActive"] == 1 else 0};
+          function toggle_altnumbering(comicid) {
+              $.ajax({
+                  url: "toggleAltNumbering",
+                  data: { ComicID: comicid },
+                  dataType: "json",
+                  success: function (r) {
+                      if (r.status === "ok") {
+                          $("#altnum_state").text(r.active === 1 ? "ON" : "OFF");
+                          window.ALTNUM_ACTIVE = r.active;
+                      } else {
+                          alert("Toggle failed: " + (r.msg || "unknown"));
+                      }
+                  },
+                  error: function () { alert("Toggle request failed."); }
+              });
+          }
+          function populate_altnumbers(comicid) {
+              if (!confirm("Auto-assign AltIssueNumber 1..N by ReleaseDate ASC for this series? Existing alt numbers will be overwritten.")) { return; }
+              $.ajax({
+                  url: "populateAltNumbers",
+                  data: { ComicID: comicid },
+                  dataType: "json",
+                  success: function (r) {
+                      if (r.status === "ok") {
+                          alert("Populated " + r.count + " alt numbers. Reload page to see them.");
+                      } else {
+                          alert("Populate failed: " + (r.msg || "unknown"));
+                      }
+                  },
+                  error: function () { alert("Populate request failed."); }
+              });
+          }
+          </script>
           <table class="display select" id="issue_table">
                 <thead>
                         <tr>
@@ -1032,6 +1076,14 @@
         }
 
         function manual_rename(comicid){
+              // AltNum-v1.1: block Mylar's manualRename on alt-numbered series.
+              // It uses helpers.rename_param which is NOT alt-aware -- would
+              // produce YYYYMM-named files and break dual-match coherence.
+              // Use scripts/mylar_altnum_substitute_rename.py instead.
+              if (window.ALTNUM_ACTIVE) {
+                  alert("Rename Files is disabled because this series has Alt Numbering ON.\n\nMylar's manualRename would re-introduce the CV YYYYMM numbering.\n\nUse scripts/mylar_altnum_substitute_rename.py to rename files to alt# instead.");
+                  return;
+              }
               $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-check'></span>Mass Renaming files for series...</div>");
               $('#ajaxMsg').addClass('success').fadeIn().delay(3000).fadeOut();
               $('#ajaxMsg').removeClass();
@@ -1688,7 +1740,11 @@
                            "targets": [1],
                            "visible": true,
                            "render": function (data,type,full){
-                               if (full[12]){
+                               // AltNum-v1: when toggle is active and an alt# exists,
+                               // show alt# as primary and put CV's YYYYMM in tooltip.
+                               if (window.ALTNUM_ACTIVE && full[12]){
+                                   return '<span title="CV# ' + full[0] + '">' + full[12] + '</span>';
+                               } else if (full[12]){
                                    return '<span title="Legacy numbering #' + full[12] + '">' + full[0] + '*</span>';
                                } else {
                                    return full[0];
